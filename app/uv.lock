@@ -24,6 +24,7 @@ dependencies = [
     { name = "deepface" },
     { name = "opencv-python" },
     { name = "pillow" },
+    { name = "tf-keras" },
 ]
 
 [package.metadata]
@@ -31,6 +32,7 @@ requires-dist = [
     { name = "deepface", specifier = ">=0.0.96" },
     { name = "opencv-python", specifier = ">=4.12.0.88" },
     { name = "pillow", specifier = ">=12.0.0" },
+    { name = "tf-keras", specifier = ">=2.20.1" },
 ]
 
 [[package]]
@@ -514,7 +516,7 @@ wheels = [
 
 [[package]]
 name = "lightphe"
-version = "0.0.15"
+version = "0.0.16"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "lightecc" },
@@ -522,9 +524,9 @@ dependencies = [
     { name = "sympy" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/af/b7/e4362a482ff77e0b501c451f0b9c14f2863ef8baa392fe00e1ec8f615054/lightphe-0.0.15.tar.gz", hash = "sha256:0a81dba7fa1f6828deee50c1d6f186b17f327e4c399045488edd40026ee71016", size = 40372, upload-time = "2025-03-13T22:06:52.912Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a3/80/49ce071360588c2dcd838bf7d1489f6c01c2f881a087b6420457abf645ca/lightphe-0.0.16.tar.gz", hash = "sha256:16e12208b85eebbe1bc2e44b73f19f21d7a92efd2c923310c572f1376fb7187f", size = 43218, upload-time = "2025-11-27T22:09:01.972Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/91/89/bc66f4d29b0107e31917419acf50ef1b4dcf24eb688a56b409cf283ba7d1/lightphe-0.0.15-py3-none-any.whl", hash = "sha256:502357f7e117b482446db36c6c170acd8b14f8feeaef49e1aad5fd9a7aef85f8", size = 59482, upload-time = "2025-03-13T22:06:51.273Z" },
+    { url = "https://files.pythonhosted.org/packages/23/83/739fa08b4ed2423d04ee60f1d46a381640c1f82df6ae44fd1518a20a6c5b/lightphe-0.0.16-py3-none-any.whl", hash = "sha256:51962d39b60ef330ac1ec36ffe06c4355d3d9b6b3e9266dcffe89d7bf7fc56cc", size = 62280, upload-time = "2025-11-27T22:09:00.518Z" },
 ]
 
 [[package]]
@@ -1234,14 +1236,14 @@ wheels = [
 
 [[package]]
 name = "sympy"
-version = "1.12"
+version = "1.14.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "mpmath" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e5/57/3485a1a3dff51bfd691962768b14310dae452431754bfc091250be50dd29/sympy-1.12.tar.gz", hash = "sha256:ebf595c8dac3e0fdc4152c51878b498396ec7f30e7a914d6071e674d49420fb8", size = 6722203, upload-time = "2023-05-10T18:23:00.378Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/83/d3/803453b36afefb7c2bb238361cd4ae6125a569b4db67cd9e79846ba2d68c/sympy-1.14.0.tar.gz", hash = "sha256:d3d3fe8df1e5a0b42f0e7bdf50541697dbe7d23746e894990c030e2b05e72517", size = 7793921, upload-time = "2025-04-27T18:05:01.611Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d2/05/e6600db80270777c4a64238a98d442f0fd07cc8915be2a1c16da7f2b9e74/sympy-1.12-py3-none-any.whl", hash = "sha256:c3588cd4295d0c0f603d0f2ae780587e64e2efeedb3521e46b9bb1d08d184fa5", size = 5742435, upload-time = "2023-05-10T18:22:14.76Z" },
+    { url = "https://files.pythonhosted.org/packages/a2/09/77d55d46fd61b4a135c444fc97158ef34a095e5681d0a6c10b75bf356191/sympy-1.14.0-py3-none-any.whl", hash = "sha256:e091cc3e99d2141a0ba2847328f5479b05d94a6635cb96148ccb3f34671bd8f5", size = 6299353, upload-time = "2025-04-27T18:04:59.103Z" },
 ]
 
 [[package]]
@@ -1323,6 +1325,18 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/87/56/ab275c2b56a5e2342568838f0d5e3e66a32354adcc159b495e374cda43f5/termcolor-3.2.0.tar.gz", hash = "sha256:610e6456feec42c4bcd28934a8c87a06c3fa28b01561d46aa09a9881b8622c58", size = 14423, upload-time = "2025-10-25T19:11:42.586Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f9/d5/141f53d7c1eb2a80e6d3e9a390228c3222c27705cbe7f048d3623053f3ca/termcolor-3.2.0-py3-none-any.whl", hash = "sha256:a10343879eba4da819353c55cb8049b0933890c2ebf9ad5d3ecd2bb32ea96ea6", size = 7698, upload-time = "2025-10-25T19:11:41.536Z" },
+]
+
+[[package]]
+name = "tf-keras"
+version = "2.20.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "tensorflow" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/42/38/6060f6c7472439bb3890b9094d69d31d9f8d5da123b16c738773e70fff91/tf_keras-2.20.1.tar.gz", hash = "sha256:884be5938fb0b2b53b1583c1ae2b660ef87215377c29b5b6a77fd221b472aeaf", size = 1254487, upload-time = "2025-09-04T21:23:41.81Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/85/6b/d9a8202bfe5c9e3b078cf550bafab962aa9d6b1a1f1180f0065399d4c9b2/tf_keras-2.20.1-py3-none-any.whl", hash = "sha256:3f0e0a34d9a4c8758f24fdc1053e6e335f16ab5534c7d34f1899b8924779760c", size = 1694335, upload-time = "2025-09-04T21:23:40.153Z" },
 ]
 
 [[package]]
