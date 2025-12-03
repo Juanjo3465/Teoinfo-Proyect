@@ -1,226 +1,161 @@
-import tkinter as tk
-from PIL import Image, ImageTk
 import cv2
-from deepface import DeepFace
-import threading
-import time
+import mediapipe as mp
+import numpy as np
+from PIL import ImageFont, ImageDraw, Image
+import platform
 
-# --- Constantes y Configuración ---
-CAMERA_ID = 0          # ID de la cámara (0 para la predeterminada)
-ANALYSIS_INTERVAL = 30 # Analizar emociones cada 30 cuadros (frames) para mejorar el rendimiento
-API_KEY = ""           # No se requiere API Key para DeepFace local, pero se incluye la variable
-API_URL = ""           # No se requiere URL API para DeepFace local
+# --- 1. Mapeo y Configuración ---
+FACE_EMOJI_MAP = {
+    'Boca Abierta': "😮",
+    'Boca Cerrada': "😐",
+    'Guiño': "😉",
+    'Ojos Cerrados': "😴",
+    'Sonrisa': "😊",
+    'Neutro': "😐"
+}
 
-class EmotionRecognizerApp:
-    """
-    Clase principal para la aplicación de reconocimiento de emociones faciales.
-    Utiliza Tkinter para la GUI y DeepFace/OpenCV para el procesamiento de video y análisis.
-    """
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Reconocedor de Emociones Facial (DeepFace)")
-        self.root.geometry("800x600")
-        self.root.resizable(False, False)
-        
-        # Estado de la aplicación
-        self.cap = None
-        self.is_running = False
-        self.frame_counter = 0
-        self.current_emotion = "Esperando detección..."
-        
-        # Bloqueo de hilos para acceso seguro a la emoción
-        self.emotion_lock = threading.Lock()
-        
-        # Configuración de la interfaz (Estilo simple)
-        self.setup_ui()
-        
-        # Intentar iniciar la cámara
-        self.start_app()
+mp_face_mesh = mp.solutions.face_mesh
+face_mesh = mp_face_mesh.FaceMesh(
+    static_image_mode=False,
+    max_num_faces=1,
+    refine_landmarks=True,
+    min_detection_confidence=0.5,
+    min_tracking_confidence=0.5
+)
 
-    def setup_ui(self):
-        """Inicializa los componentes de la interfaz de usuario de Tkinter."""
-        
-        # Fuente grande y centrada para el título
-        title_font = ('Helvetica', 18, 'bold')
-        self.title_label = tk.Label(self.root, text="Detección de Emociones en Vivo", 
-                                    font=title_font, fg="#2c3e50")
-        self.title_label.pack(pady=10)
+# --- 2. Funciones de Ayuda ---
+def get_emoji_font(size=60):
+    system = platform.system()
+    font_path = "arial.ttf"
+    if system == "Windows": font_path = "seguiemj.ttf"
+    elif system == "Darwin": font_path = "Apple Color Emoji.ttc"
+    elif system == "Linux": font_path = "NotoColorEmoji.ttf"
+    try:
+        return ImageFont.truetype(font_path, size)
+    except IOError:
+        return ImageFont.load_default()
 
-        # Marco para el video
-        self.video_frame = tk.Frame(self.root, width=640, height=480, bg="#ecf0f1", bd=3, relief=tk.RIDGE)
-        self.video_frame.pack(pady=10)
-        
-        # Etiqueta donde se mostrará el stream de video
-        self.video_label = tk.Label(self.video_frame)
-        self.video_label.pack()
+emoji_font = get_emoji_font(60)
 
-        # Etiqueta para mostrar la emoción detectada
-        emotion_font = ('Helvetica', 24, 'bold')
-        self.emotion_var = tk.StringVar(value="Esperando detección...")
-        self.emotion_label = tk.Label(self.root, textvariable=self.emotion_var, 
-                                      font=emotion_font, fg="#e74c3c", pady=15)
-        self.emotion_label.pack(pady=10)
+def euclidean_distance(point1, point2):
+    x1, y1 = point1.x, point1.y
+    x2, y2 = point2.x, point2.y
+    return np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
 
-        # Botón de Salir
-        exit_button = tk.Button(self.root, text="Salir", command=self.on_closing, 
-                                bg="#34495e", fg="white", font=('Helvetica', 12, 'bold'), 
-                                relief=tk.FLAT, padx=20, pady=5)
-        exit_button.pack(pady=10)
+def calculate_ear(landmarks, indices):
+    # Eye Aspect Ratio
+    A = euclidean_distance(landmarks[indices[1]], landmarks[indices[5]])
+    B = euclidean_distance(landmarks[indices[2]], landmarks[indices[4]])
+    C = euclidean_distance(landmarks[indices[0]], landmarks[indices[3]])
+    return (A + B) / (2.0 * C)
 
-        # Configurar el protocolo de cierre de ventana
-        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+def calculate_mar(landmarks, indices):
+    # Mouth Aspect Ratio
+    A = euclidean_distance(landmarks[indices[1]], landmarks[indices[7]])
+    A2 = euclidean_distance(landmarks[indices[2]], landmarks[indices[6]])
+    A3 = euclidean_distance(landmarks[indices[3]], landmarks[indices[5]])
+    B = euclidean_distance(landmarks[indices[0]], landmarks[indices[4]])
+    return (A + A2 + A3) / (3.0 * B)
 
-    def start_app(self):
-        """Inicia la captura de video y el hilo de procesamiento."""
-        self.cap = cv2.VideoCapture(CAMERA_ID)
-        
-        if not self.cap.isOpened():
-            self.emotion_var.set("ERROR: No se pudo abrir la cámara.")
-            return
+# Índices
+LEFT_EYE_IDXS = [33, 160, 158, 133, 153, 144]
+RIGHT_EYE_IDXS = [362, 385, 387, 263, 373, 380]
+MOUTH_IDXS = [61, 185, 40, 39, 291, 181, 17, 0]
 
-        self.is_running = True
-        
-        # Iniciar el hilo para la captura de video y el análisis de DeepFace
-        self.video_thread = threading.Thread(target=self.video_loop)
-        self.video_thread.start()
-        
-        # Iniciar la función de actualización de la GUI en el hilo principal
-        self.update_gui()
+# --- 3. Clasificación con MAYOR SENSIBILIDAD ---
 
-    def update_gui(self):
-        """
-        Función que se ejecuta en el hilo principal de Tkinter
-        para actualizar la imagen de video y el texto de la emoción.
-        """
-        if not self.is_running:
-            return
-
-        # 1. Obtener la última emoción detectada de forma segura
-        with self.emotion_lock:
-            emotion_text = self.current_emotion
-        
-        # 2. Actualizar el texto de la emoción en la GUI
-        self.emotion_var.set(f"Emoción: {emotion_text.upper()}")
-
-        # 3. Leer el último frame procesado (desde self.cap.read() en el otro hilo)
-        # NOTA: La lectura y dibujo de la caja delimitadora se realiza en el hilo secundario
-        # self.cap.read() se usa en el hilo secundario (video_loop)
-        
-        # Si la cámara está abierta, leer el frame para mostrarlo
-        ret, frame = self.cap.read()
-
-        if ret:
-            # Revertir la imagen (opcional, para visualización frontal)
-            frame = cv2.flip(frame, 1)
-
-            # Si hay una emoción detectada (lo que implica que DeepFace.analyze se ejecutó)
-            if "bounding_box" in self.__dict__:
-                # Dibujar el rectángulo delimitador (bounding box) y la emoción
-                x, y, w, h = self.bounding_box
-                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-                cv2.putText(frame, emotion_text.upper(), (x, y - 10), 
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
-
-            # Convertir el frame de OpenCV (BGR) a RGB para PIL
-            cv2image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            
-            # Convertir a imagen PIL y luego a PhotoImage para Tkinter
-            img = Image.fromarray(cv2image)
-            imgtk = ImageTk.PhotoImage(image=img)
-            
-            # Actualizar la etiqueta con el nuevo frame
-            self.video_label.imgtk = imgtk
-            self.video_label.configure(image=imgtk)
-
-        # Programar la próxima actualización (aprox. 30 ms = ~33 FPS)
-        self.root.after(30, self.update_gui)
-
-    def video_loop(self):
-        """
-        Hilo secundario para la captura de video y el análisis intensivo de DeepFace.
-        Se ejecuta de forma continua mientras la aplicación está abierta.
-        """
-        while self.is_running:
-            # La lectura del frame para el análisis debe ser independiente de la GUI update
-            ret, frame = self.cap.read()
-            if not ret:
-                time.sleep(0.01) # Pequeña pausa si falla la lectura
-                continue
-
-            # Invertir el frame para la coherencia visual (si es necesario)
-            frame = cv2.flip(frame, 1)
-
-            self.frame_counter += 1
-            
-            # Realizar el análisis de DeepFace solo cada N cuadros
-            if self.frame_counter % ANALYSIS_INTERVAL == 0:
-                self.frame_counter = 0 # Reiniciar el contador
-                try:
-                    # DeepFace.analyze es intensivo en CPU. Se ejecuta en este hilo.
-                    # El parámetro 'actions' solo incluye 'emotion'.
-                    results = DeepFace.analyze(
-                        frame, 
-                        actions=['emotion'], 
-                        enforce_detection=False # Permite que no falle si no se detecta la cara perfectamente
-                    )
-                    
-                    if results:
-                        # Tomar el primer resultado si hay múltiples caras
-                        result = results[0] 
-                        emotion = result['dominant_emotion']
-                        
-                        # Extraer la caja delimitadora
-                        detection = result['region']
-                        x = detection['x']
-                        y = detection['y']
-                        w = detection['w']
-                        h = detection['h']
-
-                        # Actualizar las variables compartidas de forma segura
-                        with self.emotion_lock:
-                            self.current_emotion = emotion
-                            self.bounding_box = (x, y, w, h)
-                        
-                    else:
-                        with self.emotion_lock:
-                            self.current_emotion = "Cara no detectada"
-                            if 'bounding_box' in self.__dict__:
-                                del self.bounding_box # Eliminar la caja si no hay cara
-
-                except Exception as e:
-                    # En caso de error (e.g., cara no encontrada y enforce_detection=True)
-                    # o cualquier otro problema de DeepFace.
-                    with self.emotion_lock:
-                        self.current_emotion = f"Análisis fallido: {str(e)[:20]}..."
-                        if 'bounding_box' in self.__dict__:
-                            del self.bounding_box
-                    # print(f"DeepFace Error: {e}") # Descomentar para depuración
-                    
-            # Pausa para evitar el uso excesivo de CPU en este hilo
-            time.sleep(0.001)
-
-    def on_closing(self):
-        """Maneja el cierre de la aplicación."""
-        print("Cerrando aplicación...")
-        self.is_running = False
-        
-        # Esperar a que el hilo de video termine
-        if self.video_thread.is_alive():
-            self.video_thread.join()
-        
-        # Liberar la cámara
-        if self.cap is not None:
-            self.cap.release()
-            
-        # Cerrar la ventana de Tkinter
-        self.root.destroy()
-
-if __name__ == '__main__':
-    # Crear la ventana principal de Tkinter
-    root = tk.Tk()
+def classify_face_sensitive(landmarks):
+    EAR_THRESHOLD = 0.20  
     
-    # Iniciar la aplicación
-    app = EmotionRecognizerApp(root)
+    MAR_THRESHOLD = 0.45  
+
+    left_ear = calculate_ear(landmarks, LEFT_EYE_IDXS)
+    right_ear = calculate_ear(landmarks, RIGHT_EYE_IDXS)
+    mar = calculate_mar(landmarks, MOUTH_IDXS)
     
-    # Iniciar el bucle principal de Tkinter
-    root.mainloop()
+    avg_ear = (left_ear + right_ear) / 2.0
+
+    stats = f"Ojos: {avg_ear:.2f} | Boca: {mar:.2f}"
+
+    state = 'Neutro'
+    
+    if mar > MAR_THRESHOLD:
+        state = 'Boca Abierta'
+    elif avg_ear < EAR_THRESHOLD:
+        state = 'Ojos Cerrados'
+    elif left_ear < EAR_THRESHOLD and right_ear > EAR_THRESHOLD:
+        state = 'Guiño' 
+    elif right_ear < EAR_THRESHOLD and left_ear > EAR_THRESHOLD:
+        state = 'Guiño'
+    else:
+        state = 'Boca Cerrada'
+        
+    return state, stats
+
+def put_emoji_pil(img_np, text, pos, font):
+    img_pil = Image.fromarray(cv2.cvtColor(img_np, cv2.COLOR_BGR2RGB))
+    draw = ImageDraw.Draw(img_pil)
+    x, y = pos
+    draw.text((x-1, y), text, font=font, fill=(0,0,0))
+    draw.text((x+1, y), text, font=font, fill=(0,0,0))
+    draw.text((x, y-1), text, font=font, fill=(0,0,0))
+    draw.text((x, y+1), text, font=font, fill=(0,0,0))
+    draw.text(pos, text, font=font, fill=(255, 255, 255))
+    return cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
+
+
+cap = cv2.VideoCapture(0)
+
+while cap.isOpened():
+    success, image = cap.read()
+    if not success: continue
+    
+    image = cv2.flip(image, 1)
+    h, w, _ = image.shape
+    
+    cv2.rectangle(image, (0, 0), (w, 100), (20, 20, 20), -1) 
+
+    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    results = face_mesh.process(image_rgb)
+
+    detected_expression = 'Neutro'
+    debug_stats = "Buscando cara..."
+    
+    if results.multi_face_landmarks:
+        for face_landmarks in results.multi_face_landmarks:
+            landmarks = face_landmarks.landmark
+            
+            detected_expression, debug_stats = classify_face_sensitive(landmarks)
+            
+            for idx in LEFT_EYE_IDXS + RIGHT_EYE_IDXS + MOUTH_IDXS:
+                pt = landmarks[idx]
+                cv2.circle(image, (int(pt.x * w), int(pt.y * h)), 1, (0, 255, 255), -1)
+            break 
+    
+    # 1. Mostrar Emoji
+    emoji_to_show = FACE_EMOJI_MAP.get(detected_expression, "❓")
+    display_text = f"{emoji_to_show} {detected_expression}"
+    
+    # Centrar texto
+    try:
+        bbox = emoji_font.getbbox(display_text)
+        text_w = bbox[2] - bbox[0]
+        text_h = bbox[3] - bbox[1]
+    except:
+        text_w, text_h = emoji_font.getsize(display_text)
+
+    text_x = int((w - text_w) / 2)
+    text_y = int((100 - text_h) / 2) - 5
+    image = put_emoji_pil(image, display_text, (text_x, text_y), emoji_font)
+
+    cv2.putText(image, f"Sensibilidad (Debug): {debug_stats}", (10, h - 20), 
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+    cv2.imshow('Deteccion Sensible', image)
+    
+    if cv2.waitKey(5) & 0xFF == ord('q'):
+        break
+
+face_mesh.close()
+cap.release()
+cv2.destroyAllWindows()
